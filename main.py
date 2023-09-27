@@ -5,6 +5,8 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 import json
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
 
 from pathlib import Path
 
@@ -152,7 +154,7 @@ def get_args_parser():
     parser.add_argument('--attn-only', action='store_true')
     
     # Dataset parameters
-    parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -191,6 +193,8 @@ def main(args):
 
     print(args)
 
+    args.nb_classes = 200
+
     if args.distillation_type != 'none' and args.finetune and not args.eval:
         raise NotImplementedError("Finetuning with distillation not yet supported")
 
@@ -204,8 +208,30 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
-    dataset_val, _ = build_dataset(is_train=False, args=args)
+    train_dir = args.data + 'train/'
+    test_dir = args.data + 'val/'
+
+    mean = (0.485, 0.456, 0.406)
+    std = (0.229, 0.224, 0.225)
+
+    normalize = transforms.Normalize(mean=mean,std=std)
+    img_size = 224
+
+    dataset_train = datasets.ImageFolder(
+    train_dir,
+    transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),
+        normalize,
+    ]))
+
+    dataset_val = datasets.ImageFolder(
+    test_dir,
+    transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),
+        normalize,
+    ]))
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -232,22 +258,18 @@ def main(args):
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
-    if args.ThreeAugment:
-        data_loader_train.dataset.transform = new_data_aug_generator(args)
+    dataset_train, batch_size=args.batch_size, sampler=sampler_train, drop_last=True,
+    num_workers=4, pin_memory=False)
 
     data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, sampler=sampler_val,
-        batch_size=int(1.5 * args.batch_size),
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False
-    )
+    dataset_val, batch_size=int(1.5 * args.batch_size), sampler=sampler_val,
+    num_workers=4, pin_memory=False)
+
+    print('training set size: {0}'.format(len(data_loader_train.dataset)))
+    print('test set size: {0}'.format(len(data_loader_val.dataset)))
+
+    if args.ThreeAugment:
+        data_loader_train.dataset.transform = new_data_aug_generator(args)
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -261,11 +283,11 @@ def main(args):
     model = create_model(
         args.model,
         pretrained=False,
-        num_classes=args.nb_classes,
+        num_classes=200,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
-        img_size=args.input_size
+        img_size=224
     )
 
                     
