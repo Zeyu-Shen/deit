@@ -1,5 +1,3 @@
-# Copyright (c) 2015-present, Facebook, Inc.
-# All rights reserved.
 import argparse
 import datetime
 import numpy as np
@@ -147,11 +145,11 @@ def get_args_parser():
     parser.add_argument('--distillation-tau', default=1.0, type=float, help="")
     
     # * Cosub params
-    parser.add_argument('--cosub', action='store_true') 
+    parser.add_argument('--cosub', action='store_true')
     
     # * Finetuning params
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
-    parser.add_argument('--attn-only', action='store_true') 
+    parser.add_argument('--attn-only', action='store_true')
     
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
